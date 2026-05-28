@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Codex Session Viewer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#15120e; --ink2:#1d1914; --panel:#211c16; --panel2:#272118;
+  --line:#3a3024; --line2:#4a3e2e;
+  --txt:#ece3d4; --txt-soft:#c4b8a3; --txt-dim:#8f8472;
+  --amber:#e6a94d; --amber-d:#c98a2e;
+  --sage:#9bbf83; --sage-d:#6f9a5a;
+  --rose:#d98a7e; --teal:#79b6ac; --violet:#b9a0d8;
+  --add:#243024; --addtx:#a8d39a; --del:#332020; --deltx:#e09b91;
+  --rad:10px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--ink); color:var(--txt);
+  font-family:"IBM Plex Sans",sans-serif; font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased; min-height:100vh;
+}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:0; opacity:.035;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+a{color:var(--amber); text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{position:relative; z-index:1; max-width:1180px; margin:0 auto; padding:0 22px}
+.hidden{display:none !important}
+
+/* ---------- app bar ---------- */
+.appbar{position:relative; z-index:3; border-bottom:1px solid var(--line); background:rgba(21,18,14,.86);
+  backdrop-filter:blur(8px); position:sticky; top:0}
+.appbar .wrap{display:flex; align-items:center; gap:14px; height:52px}
+.brand{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.16em;
+  text-transform:uppercase; color:var(--amber-d); display:flex; align-items:center; gap:9px}
+.brand .gly{color:var(--sage); font-weight:600}
+.appbar .sp{flex:1}
+.navbtn{font-family:"IBM Plex Mono",monospace; font-size:11.5px; cursor:pointer;
+  background:var(--panel); border:1px solid var(--line); color:var(--txt-soft);
+  border-radius:7px; padding:6px 12px}
+.navbtn:hover{background:var(--panel2); color:var(--txt)}
+
+/* ---------- drop screen ---------- */
+#screen-drop{min-height:calc(100vh - 52px); display:flex; align-items:center; justify-content:center; padding:40px 22px}
+.dropwrap{max-width:680px; width:100%; text-align:center}
+.eyebrow{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.24em;
+  text-transform:uppercase; color:var(--amber-d); margin:0 0 14px}
+.bigtitle{font-family:"Fraunces",serif; font-weight:600; font-size:clamp(34px,6vw,60px);
+  line-height:1.0; margin:0 0 14px}
+.bigtitle em{font-style:italic; color:var(--amber)}
+.lede{color:var(--txt-soft); font-size:16px; max-width:50ch; margin:0 auto 34px}
+.dropzone{border:1.5px dashed var(--line2); border-radius:16px; padding:48px 30px;
+  background:linear-gradient(180deg,var(--panel),var(--ink2)); cursor:pointer; transition:.18s}
+.dropzone:hover,.dropzone.drag{border-color:var(--amber); background:var(--panel2);
+  box-shadow:0 0 0 4px rgba(230,169,77,.08)}
+.dropzone .prompt{font-family:"IBM Plex Mono",monospace; font-size:46px; color:var(--sage); line-height:1}
+.dropzone .dhead{font-family:"Fraunces",serif; font-size:22px; margin:18px 0 4px}
+.dropzone .dsub{color:var(--txt-dim); font-family:"IBM Plex Mono",monospace; font-size:12.5px}
+.note{margin-top:22px; color:var(--txt-dim); font-size:12.5px; font-family:"IBM Plex Mono",monospace}
+.err{margin-top:20px; color:var(--rose); font-family:"IBM Plex Mono",monospace; font-size:13px;
+  background:#2a1b1a; border:1px solid #5a302c; border-radius:8px; padding:11px 14px; text-align:left}
+.busy{margin-top:24px; font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--amber)}
+.busy::after{content:"▮"; animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:0}}
+
+/* ---------- session list ---------- */
+#screen-list{padding:42px 0 80px}
+.list-h{font-family:"Fraunces",serif; font-size:30px; font-weight:600; margin:0 0 4px}
+.list-sub{color:var(--txt-dim); font-family:"IBM Plex Mono",monospace; font-size:12.5px; margin:0 0 26px}
+.scard{display:grid; grid-template-columns:1fr auto; gap:8px 18px; align-items:center;
+  background:linear-gradient(180deg,var(--panel2),var(--panel)); border:1px solid var(--line);
+  border-left:3px solid var(--amber); border-radius:var(--rad); padding:16px 18px;
+  margin-bottom:12px; cursor:pointer; transition:.15s}
+.scard:hover{border-left-color:var(--sage); background:var(--panel2); transform:translateX(2px)}
+.scard .stitle{font-family:"Fraunces",serif; font-size:18px; color:var(--txt)}
+.scard .stitle em{color:var(--amber); font-style:italic}
+.scard .smeta{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--txt-dim);
+  margin-top:5px; display:flex; flex-wrap:wrap; gap:6px 14px}
+.scard .snip{grid-column:1/2; color:var(--txt-soft); font-size:13.5px; margin-top:8px;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden}
+.scard .mini{justify-self:end; text-align:right; display:flex; gap:18px}
+.scard .mini .n{font-family:"Fraunces",serif; font-size:22px; color:var(--amber); line-height:1}
+.scard .mini .l{font-family:"IBM Plex Mono",monospace; font-size:9.5px; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--txt-dim); margin-top:3px}
+
+/* ---------- viewer (transcript) ---------- */
+header.hero{border-bottom:1px solid var(--line); padding:36px 0 24px; margin-bottom:28px;
+  background:linear-gradient(180deg,rgba(230,169,77,.05),transparent)}
+.hero .eyebrow{margin-bottom:10px}
+h1.title{font-family:"Fraunces",serif; font-weight:600; font-size:clamp(28px,4.6vw,48px);
+  line-height:1.03; margin:0 0 6px; color:var(--txt)}
+h1.title .repo{color:var(--amber); font-style:italic}
+.sub{color:var(--txt-soft); font-size:15px; max-width:62ch; margin:10px 0 20px}
+.meta-row{display:flex; flex-wrap:wrap; gap:8px 10px; font-family:"IBM Plex Mono",monospace; font-size:12px}
+.chip{display:inline-flex; align-items:center; gap:7px; background:var(--panel);
+  border:1px solid var(--line); border-radius:999px; padding:5px 12px; color:var(--txt-soft)}
+.chip b{color:var(--txt); font-weight:500}
+.chip .dot{width:7px;height:7px;border-radius:50%;background:var(--sage)}
+.stats{display:flex; flex-wrap:wrap; gap:26px; margin-top:22px; padding-top:20px; border-top:1px solid var(--line)}
+.stat .num{font-family:"Fraunces",serif; font-size:30px; font-weight:600; line-height:1; color:var(--amber)}
+.stat .lab{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--txt-dim); margin-top:5px}
+
+.grid{display:grid; grid-template-columns:248px 1fr; gap:40px; align-items:start}
+@media(max-width:880px){.grid{grid-template-columns:1fr} .toc{display:none}}
+.toc{position:sticky; top:70px; max-height:calc(100vh - 90px); overflow:auto; padding-right:6px}
+.toc-h{font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--txt-dim); margin:0 0 12px}
+.toc ol{list-style:none; margin:0; padding:0; counter-reset:q}
+.toc li{counter-increment:q; margin-bottom:2px}
+.toc a{display:flex; gap:9px; padding:7px 9px; border-radius:7px; color:var(--txt-soft);
+  font-size:12.5px; line-height:1.35; border-left:2px solid transparent}
+.toc a:hover{background:var(--panel); text-decoration:none; color:var(--txt)}
+.toc a.active{background:var(--panel2); color:var(--amber); border-left-color:var(--amber)}
+.toc a::before{content:counter(q,decimal-leading-zero); font-family:"IBM Plex Mono",monospace;
+  font-size:10px; color:var(--amber-d); flex:none; padding-top:1px}
+.toolbar{display:flex; gap:7px; margin:16px 0 0; flex-wrap:wrap}
+.tgl{font-family:"IBM Plex Mono",monospace; font-size:11px; cursor:pointer; user-select:none;
+  background:var(--panel); border:1px solid var(--line); color:var(--txt-dim); border-radius:6px; padding:5px 9px}
+.tgl.on{color:var(--sage); border-color:var(--sage-d)}
+
+.thread{padding-bottom:120px; min-width:0}
+.user-block{background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border:1px solid var(--line2); border-left:3px solid var(--amber);
+  border-radius:var(--rad); padding:16px 18px; margin:30px 0 14px; scroll-margin-top:70px}
+.user-block .uq{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.18em;
+  text-transform:uppercase; color:var(--amber-d); display:flex; gap:10px; align-items:center; margin-bottom:9px}
+.user-block .uq .ln{flex:1; height:1px; background:var(--line)}
+.user-block .utext{color:var(--txt); font-size:15.5px; line-height:1.62}
+.user-block .utext p{margin:0 0 .6em} .user-block .utext p:last-child{margin:0}
+.final{color:var(--txt); font-size:15px; line-height:1.68; padding:4px 0}
+.final p{margin:0 0 .85em}
+.final h4{font-family:"Fraunces",serif; font-weight:600; font-size:17px; margin:1.1em 0 .4em; color:var(--amber)}
+.final ul,.final ol{margin:.3em 0 .9em; padding-left:1.3em}
+.final li{margin:.2em 0}
+.final code{font-family:"IBM Plex Mono",monospace; font-size:.9em; background:var(--ink2);
+  border:1px solid var(--line); border-radius:5px; padding:1px 5px; color:var(--teal)}
+.final pre{background:var(--ink2); border:1px solid var(--line); border-radius:8px; padding:13px 15px; overflow:auto; margin:.6em 0}
+.final pre code{background:none; border:none; padding:0; color:var(--txt-soft); font-size:13px; line-height:1.55}
+.commentary{color:var(--txt-soft); font-style:italic; font-size:14px; line-height:1.6;
+  border-left:2px solid var(--line2); padding:2px 0 2px 14px; margin:2px 0}
+.commentary code{font-style:normal; font-family:"IBM Plex Mono",monospace; font-size:.88em; color:var(--teal)}
+.card{border:1px solid var(--line); border-radius:9px; margin:8px 0; overflow:hidden; background:var(--ink2)}
+.card.exec{border-color:#34402c} .card.patch{border-color:#403430}
+.chead{display:flex; align-items:center; gap:10px; padding:9px 13px; cursor:pointer;
+  font-family:"IBM Plex Mono",monospace; font-size:12.5px; user-select:none; background:var(--panel)}
+.chead:hover{background:var(--panel2)}
+.chead .ic{flex:none; font-weight:600}
+.exec .chead .ic{color:var(--sage)} .patch .chead .ic{color:var(--rose)}
+.search .chead .ic{color:var(--teal)} .plan .chead .ic{color:var(--violet)}
+.chead .lbl{flex:1; color:var(--txt); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.chead .arr{flex:none; color:var(--txt-dim); transition:transform .15s; font-size:10px}
+.card.open .chead .arr{transform:rotate(90deg)}
+.cbody{display:none; border-top:1px solid var(--line)}
+.card.open .cbody{display:block}
+.term{margin:0; padding:13px 15px; font-family:"IBM Plex Mono",monospace; font-size:12.5px;
+  line-height:1.55; white-space:pre-wrap; word-break:break-word; color:var(--txt-soft);
+  max-height:460px; overflow:auto; background:var(--ink)}
+.cmd-inline{font-family:"IBM Plex Mono",monospace}
+.cmd-inline .ps1, .term .ps1{color:var(--sage)}
+.diff{margin:0; font-family:"IBM Plex Mono",monospace; font-size:12px; line-height:1.5; overflow:auto; max-height:520px}
+.diff .fhead{background:var(--panel2); color:var(--txt); padding:7px 14px; border-top:1px solid var(--line);
+  font-size:11.5px; position:sticky; left:0}
+.diff .fhead .ftag{font-size:9px; letter-spacing:.12em; padding:1px 6px; border-radius:4px; margin-right:8px}
+.ftag.add{background:var(--add); color:var(--addtx)} .ftag.mod{background:#2f2a1c; color:var(--amber)}
+.ftag.del{background:var(--del); color:var(--deltx)}
+.dl{display:block; padding:0 14px; white-space:pre-wrap; word-break:break-word}
+.dl.plus{background:var(--add); color:var(--addtx)} .dl.minus{background:var(--del); color:var(--deltx)}
+.dl.at{color:var(--teal); background:var(--ink2)} .dl.ctx{color:var(--txt-dim)}
+.planbox{padding:12px 15px}
+.planbox .pexpl{color:var(--txt-soft); font-style:italic; font-size:13.5px; margin:0 0 10px}
+.pstep{display:flex; gap:10px; align-items:baseline; padding:3px 0; font-size:13.5px}
+.pstep .pp{font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.08em; text-transform:uppercase;
+  padding:2px 7px; border-radius:5px; flex:none; min-width:78px; text-align:center}
+.pp.completed{background:var(--add); color:var(--addtx)} .pp.in_progress{background:#33301c; color:var(--amber)}
+.pp.pending{background:var(--panel2); color:var(--txt-dim)}
+.pstep.completed .ptxt{color:var(--txt-dim); text-decoration:line-through}
+.qchips{padding:11px 14px; display:flex; flex-direction:column; gap:6px}
+.qchips .q{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--txt-soft);
+  background:var(--ink); border:1px solid var(--line); border-radius:6px; padding:6px 10px}
+.qchips .q::before{content:"\2315 "; color:var(--teal)}
+.think{display:flex; align-items:center; gap:8px; padding:5px 0 5px 4px; color:var(--txt-dim);
+  font-family:"IBM Plex Mono",monospace; font-size:11px; opacity:.7}
+.think .pulse{width:5px;height:5px;border-radius:50%;background:var(--violet)}
+.aborted{margin:18px 0; padding:11px 15px; border-radius:8px; background:#2a1b1a; border:1px solid #5a302c;
+  color:var(--rose); font-family:"IBM Plex Mono",monospace; font-size:12.5px}
+.ok{color:var(--sage)} .fail{color:var(--rose)}
+.badge{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:1px 7px; border-radius:5px;
+  background:var(--panel2); color:var(--txt-dim); margin-left:6px}
+footer{border-top:1px solid var(--line); padding:24px 0 60px; color:var(--txt-dim);
+  font-family:"IBM Plex Mono",monospace; font-size:11.5px; text-align:center; position:relative; z-index:1}
+</style>
+</head>
+<body>
+
+<div class="appbar"><div class="wrap">
+  <span class="brand"><span class="gly">&gt;_</span> Codex Session Viewer</span>
+  <span class="sp"></span>
+  <span class="navbtn hidden" id="btnSessions">&larr; sessions</span>
+  <span class="navbtn hidden" id="btnNew">&uarr; new archive</span>
+</div></div>
+
+<!-- DROP SCREEN -->
+<section id="screen-drop"><div class="dropwrap">
+  <p class="eyebrow">Codex CLI · rollout logs</p>
+  <h1 class="bigtitle">Read your <em>agent sessions</em></h1>
+  <p class="lede">Drop a Codex sessions archive and get a clean, browsable transcript of every turn, command, patch, and plan. Everything runs in your browser; nothing is uploaded.</p>
+  <div class="dropzone" id="dz">
+    <div class="prompt">&gt;_</div>
+    <div class="dhead">Drop a .tar.gz here</div>
+    <div class="dsub">or click to choose a file · .tar.gz / .tgz / .tar</div>
+  </div>
+  <input type="file" id="fileInput" accept=".gz,.tgz,.tar,application/gzip,application/x-tar" class="hidden">
+  <div class="busy hidden" id="busy">Unpacking archive</div>
+  <div class="err hidden" id="err"></div>
+  <p class="note">Expects the standard layout: <code>.codex/sessions/YYYY/MM/DD/rollout-*.jsonl</code></p>
+</div></section>
+
+<!-- LIST SCREEN -->
+<section id="screen-list" class="hidden"><div class="wrap">
+  <h2 class="list-h" id="listH"></h2>
+  <p class="list-sub" id="listSub"></p>
+  <div id="sessionCards"></div>
+</div></section>
+
+<!-- VIEWER SCREEN -->
+<section id="screen-view" class="hidden">
+  <header class="hero"><div class="wrap">
+    <p class="eyebrow">Codex CLI · Session Transcript</p>
+    <h1 class="title" id="vTitle"></h1>
+    <p class="sub" id="vSub"></p>
+    <div class="meta-row" id="metaRow"></div>
+    <div class="stats" id="stats"></div>
+  </div></header>
+  <div class="wrap"><div class="grid">
+    <nav class="toc">
+      <p class="toc-h">Conversation</p>
+      <ol id="toc"></ol>
+      <div class="toolbar">
+        <span class="tgl on" data-t="commentary">commentary</span>
+        <span class="tgl on" data-t="exec">terminal</span>
+        <span class="tgl" data-t="think">reasoning</span>
+      </div>
+    </nav>
+    <main class="thread" id="thread"></main>
+  </div></div>
+  <footer class="wrap" id="vFooter"></footer>
+</section>
+
+<script>
+/* =========================================================================
+   1. ARCHIVE READING  (gzip + tar, all client-side)
+   ========================================================================= */
+function loadPako(){
+  return new Promise((res,rej)=>{
+    if(window.pako) return res();
+    const s=document.createElement('script');
+    s.src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js";
+    s.onload=()=>res(); s.onerror=()=>rej(new Error("could not load decompressor"));
+    document.head.appendChild(s);
+  });
+}
+async function maybeGunzip(buf){
+  const u=new Uint8Array(buf);
+  const isGz = u.length>2 && u[0]===0x1f && u[1]===0x8b;
+  if(!isGz) return buf;
+  if(typeof DecompressionStream!=='undefined'){
+    const ds=new DecompressionStream('gzip');
+    const stream=new Blob([buf]).stream().pipeThrough(ds);
+    return await new Response(stream).arrayBuffer();
+  }
+  await loadPako();
+  return window.pako.ungzip(u).buffer;
+}
+function untar(buf){
+  const view=new Uint8Array(buf), dec=new TextDecoder('utf-8');
+  const files=[]; let off=0, longName=null, paxPath=null;
+  const cstr=(s,l)=>{let e=s,m=s+l; while(e<m&&view[e]!==0)e++; return dec.decode(view.subarray(s,e));};
+  const octal=(s,l)=>{const t=cstr(s,l).replace(/[^0-7]/g,''); return t?parseInt(t,8):0;};
+  while(off+512<=view.length){
+    let zero=true; for(let i=0;i<512;i++){ if(view[off+i]!==0){zero=false;break;} }
+    if(zero) break;
+    let name=cstr(off,100);
+    const size=octal(off+124,12);
+    const type=String.fromCharCode(view[off+156]);
+    const prefix=cstr(off+345,155), magic=cstr(off+257,6);
+    if(prefix && magic.indexOf('ustar')===0) name=prefix+'/'+name;
+    const dStart=off+512, dEnd=dStart+size;
+    if(type==='L'){
+      longName=dec.decode(view.subarray(dStart,dEnd)).replace(/\0+$/,'');
+    } else if(type==='x'||type==='g'){
+      const rec=dec.decode(view.subarray(dStart,dEnd));
+      const m=rec.match(/\d+ path=([^\n]+)\n/); if(m) paxPath=m[1];
+    } else if(type==='0'||type==='\u0000'||type===''){
+      files.push({name:(paxPath||longName||name), bytes:view.subarray(dStart,dEnd)});
+      longName=null; paxPath=null;
+    } else { longName=null; paxPath=null; }
+    off=dStart+Math.ceil(size/512)*512;
+  }
+  return files;
+}
+async function readArchive(file){
+  const ab=await file.arrayBuffer();
+  const tar=await maybeGunzip(ab);
+  return untar(tar);
+}
+
+/* =========================================================================
+   2. ROLLOUT PARSER  (ported from the Python reference)
+   ========================================================================= */
+function cleanOutput(out){
+  if(!out) return "";
+  const lines=out.split("\n"), keep=[];
+  const skip=["Chunk ID:","Wall time:","Process exited with code","Original token count:","Exit code:"];
+  let started=false;
+  for(const ln of lines){
+    if(ln.trim()==="Output:"){ started=true; continue; }
+    if(!started && skip.some(p=>ln.indexOf(p)===0)) continue;
+    if(started) keep.push(ln);
+  }
+  const body = started ? keep.join("\n") : out;
+  return body.replace(/\n+$/,"")+"\n";
+}
+function parseRollout(text){
+  const meta={}, ctx={}, nodes=[], byCall={}; const wsIds=new Set();
+  let lastTerm=null, lastUser=null;
+  const add=n=>{nodes.push(n); return n;};
+  for(const line of text.split("\n")){
+    const s=line.trim(); if(!s) continue;
+    let o; try{o=JSON.parse(s);}catch(e){continue;}
+    const t=o.type, p=o.payload||{}, ts=o.timestamp;
+    if(t==="session_meta"){
+      Object.assign(meta,{id:p.id,cwd:p.cwd,cli_version:p.cli_version,originator:p.originator,
+        model_provider:p.model_provider,started:p.timestamp,git:p.git||{}});
+      continue;
+    }
+    if(t==="turn_context" && !ctx.model){
+      Object.assign(ctx,{model:p.model,personality:p.personality,
+        approval_policy:p.approval_policy,sandbox:(p.sandbox_policy||{}).type});
+      continue;
+    }
+    if(t==="event_msg"){
+      const pt=p.type;
+      if(pt==="user_message"){
+        const msg=(p.message||"").trim();
+        if(lastUser!==null && lastUser===msg) continue;
+        lastUser=msg; add({kind:"user",ts,text:msg});
+      } else if(pt==="patch_apply_end"){
+        const n=byCall[p.call_id]; if(n){ n.success=p.success; n.changes=p.changes||{}; }
+      } else if(pt==="turn_aborted"){
+        add({kind:"aborted",ts,reason:p.reason});
+      }
+      continue;
+    }
+    if(t==="response_item"){
+      const pt=p.type;
+      if(pt==="message" && p.role==="assistant"){
+        const txt=(p.content||[]).filter(c=>c.type==="output_text"||c.type==="text")
+          .map(c=>c.text||"").join("").trim();
+        const ph=(p.phase||"").toLowerCase();
+        add({kind:(ph==="final"||ph==="final_answer")?"final":"commentary",ts,text:txt});
+      } else if(pt==="reasoning"){
+        const sm=p.summary||[];
+        const txt=sm.length? sm.map(x=>typeof x==="object"?(x.text||""):String(x)).join("\n"):"";
+        add({kind:"thinking",ts,text:txt});
+      } else if(pt==="function_call"){
+        const name=p.name, cid=p.call_id; let args={};
+        try{args=JSON.parse(p.arguments||"{}");}catch(e){args={_raw:p.arguments};}
+        if(name==="write_stdin"){ wsIds.add(cid); }
+        else if(name==="exec_command"){
+          const n=add({kind:"exec",ts,cmd:args.cmd||"",workdir:args.workdir||"",output:""});
+          byCall[cid]=n; lastTerm=n;
+        } else if(name==="update_plan"){
+          add({kind:"plan",ts,explanation:args.explanation,steps:args.plan||[]});
+        } else {
+          const n=add({kind:"call",ts,name,args,output:""}); byCall[cid]=n;
+        }
+      } else if(pt==="function_call_output"){
+        const cid=p.call_id, out=p.output||"";
+        if(wsIds.has(cid)){ if(lastTerm) lastTerm.output+=cleanOutput(out); }
+        else{ const n=byCall[cid]; if(n) n.output=(n.output||"")+cleanOutput(out); }
+      } else if(pt==="custom_tool_call"){
+        const n=add({kind:"patch",ts,name:p.name,input:p.input||"",output:"",success:null,changes:{}});
+        byCall[p.call_id]=n; if(p.name==="apply_patch") lastTerm=null;
+      } else if(pt==="custom_tool_call_output"){
+        const n=byCall[p.call_id]; if(n) n.output=p.output||"";
+      } else if(pt==="web_search_call"){
+        const a=p.action||{};
+        add({kind:"search",ts,queries:a.queries||(a.query?[a.query]:[]),status:p.status});
+      }
+      continue;
+    }
+  }
+  return {meta,ctx,nodes};
+}
+function computeModel(parsed){
+  const {meta,ctx,nodes}=parsed;
+  const cnt=k=>nodes.filter(n=>n.kind===k).length;
+  const files=new Set();
+  nodes.forEach(n=>{ if(n.kind==="patch") Object.keys(n.changes||{}).forEach(f=>files.add(f)); });
+  const repo=((meta.git||{}).repository_url||"");
+  const repo_short=repo.replace("https://github.com/","").replace(".git","")||"session";
+  const commit=((meta.git||{}).commit_hash||"").slice(0,10);
+  const started=(meta.started||"").slice(0,19).replace("T"," ")+" UTC";
+  const firstUser=(nodes.find(n=>n.kind==="user")||{}).text||"";
+  return {meta,ctx,nodes,repo_short,commit,started,firstUser,
+    stats:{turns:cnt("user"),execs:cnt("exec"),patches:cnt("patch"),
+           thoughts:cnt("thinking"),files:[...files].sort()}};
+}
+
+/* =========================================================================
+   3. RENDERING  (markdown + transcript DOM)
+   ========================================================================= */
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function inlineMd(s){
+  s=esc(s);
+  s=s.replace(/\[([^\]]+)\]\((<?)([^)]+?)(>?)\)/g,(m,label,lb,target)=>
+    '<a href="#" onclick="return false" title="'+esc(target)+'">'+label+'</a>');
+  s=s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+  return s;
+}
+function renderMd(text){
+  if(!text) return '';
+  const lines=text.split('\n'); let out=[],i=0;
+  while(i<lines.length){
+    let ln=lines[i];
+    if(/^```/.test(ln)){ let buf=[]; i++;
+      while(i<lines.length && !/^```/.test(lines[i])){buf.push(lines[i]);i++;} i++;
+      out.push('<pre><code>'+esc(buf.join('\n'))+'</code></pre>'); continue; }
+    let hm=ln.match(/^\*\*([^*]+)\*\*\s*$/);
+    if(hm){ out.push('<h4>'+esc(hm[1])+'</h4>'); i++; continue; }
+    if(/^\s*[-*]\s+/.test(ln)){ let it=[];
+      while(i<lines.length && /^\s*[-*]\s+/.test(lines[i])){it.push('<li>'+inlineMd(lines[i].replace(/^\s*[-*]\s+/,''))+'</li>');i++;}
+      out.push('<ul>'+it.join('')+'</ul>'); continue; }
+    if(/^\s*\d+\.\s+/.test(ln)){ let it=[];
+      while(i<lines.length && /^\s*\d+\.\s+/.test(lines[i])){it.push('<li>'+inlineMd(lines[i].replace(/^\s*\d+\.\s+/,''))+'</li>');i++;}
+      out.push('<ol>'+it.join('')+'</ol>'); continue; }
+    if(ln.trim()===''){ i++; continue; }
+    let buf=[ln]; i++;
+    while(i<lines.length && lines[i].trim()!=='' && !/^```/.test(lines[i])
+          && !/^\s*[-*]\s+/.test(lines[i]) && !/^\s*\d+\.\s+/.test(lines[i])
+          && !/^\*\*([^*]+)\*\*\s*$/.test(lines[i])){ buf.push(lines[i]); i++; }
+    out.push('<p>'+inlineMd(buf.join(' '))+'</p>');
+  }
+  return out.join('');
+}
+const fileTag=t=>t==='add'?'add':t==='delete'?'del':'mod';
+const fileTagLabel=t=>t==='add'?'NEW':t==='delete'?'DEL':'EDIT';
+function diffHtml(changes){
+  let parts=[];
+  for(const path in changes){
+    const c=changes[path], tt=c.type||'update';
+    parts.push('<div class="fhead"><span class="ftag '+fileTag(tt)+'">'+fileTagLabel(tt)+'</span>'+esc(path)+'</div>');
+    let body=c.unified_diff||c.content||'';
+    if(tt==='add' && c.content) body=c.content.split('\n').map(l=>'+'+l).join('\n');
+    body.split('\n').forEach(l=>{
+      let cls='ctx';
+      if(/^@@/.test(l)) cls='at'; else if(/^\+/.test(l)) cls='plus'; else if(/^-/.test(l)) cls='minus';
+      parts.push('<span class="dl '+cls+'">'+esc(l||' ')+'</span>');
+    });
+  }
+  return '<div class="diff">'+parts.join('')+'</div>';
+}
+function card(kind,icon,label,badge,bodyHtml,open){
+  return '<div class="card '+kind+(open?' open':'')+'">'
+    +'<div class="chead" onclick="this.parentNode.classList.toggle(\'open\')">'
+    +'<span class="ic">'+icon+'</span><span class="lbl">'+label+'</span>'
+    +(badge||'')+'<span class="arr">&#9654;</span></div>'
+    +'<div class="cbody">'+bodyHtml+'</div></div>';
+}
+
+let currentObs=null;
+function renderViewer(model){
+  document.getElementById('vTitle').innerHTML='Session &mdash; <span class="repo">'+esc(model.repo_short)+'</span>';
+  document.getElementById('vSub').textContent=
+    model.stats.turns+' user turns · '+model.stats.execs+' commands · '
+    +model.stats.patches+' patches across '+model.stats.files.length+' files.';
+  document.getElementById('metaRow').innerHTML=[
+    '<span class="chip"><span class="dot"></span><b>'+esc(model.ctx.model||'?')+'</b> · '+esc(model.meta.model_provider||'')+'</span>',
+    '<span class="chip">repo <b>'+esc(model.repo_short)+'</b></span>',
+    model.commit?'<span class="chip">commit <b>'+esc(model.commit)+'</b></span>':'',
+    model.ctx.personality?'<span class="chip">'+esc(model.ctx.personality)+' · sandbox: '+esc(model.ctx.sandbox||'?')+'</span>':'',
+    '<span class="chip">'+esc(model.started)+'</span>',
+  ].join('');
+  const S=model.stats;
+  document.getElementById('stats').innerHTML=[
+    ['Turns',S.turns],['Commands',S.execs],['Patches',S.patches],
+    ['Files touched',S.files.length],['Reasoning steps',S.thoughts],
+  ].map(([l,v])=>'<div class="stat"><div class="num">'+v+'</div><div class="lab">'+l+'</div></div>').join('');
+  document.getElementById('vFooter').textContent=
+    'session '+(model.meta.id||'').slice(0,18)+' · cli '+(model.meta.cli_version||'')
+    +' · model '+(model.ctx.model||'')+' · '+model.started;
+
+  const thread=document.getElementById('thread'), toc=document.getElementById('toc');
+  thread.innerHTML=''; toc.innerHTML='';
+  let qn=0; const anchors=[];
+  model.nodes.forEach(n=>{
+    const el=document.createElement('div');
+    if(n.kind==='user'){
+      qn++; const aid='q'+qn; anchors.push({id:aid,text:n.text});
+      el.className='user-block'; el.id=aid;
+      el.innerHTML='<div class="uq"><span>Turn '+String(qn).padStart(2,'0')+'</span><span class="ln"></span><span>user</span></div>'
+        +'<div class="utext">'+renderMd(n.text)+'</div>';
+    } else if(n.kind==='final'){ el.className='final'; el.innerHTML=renderMd(n.text); }
+    else if(n.kind==='commentary'){ el.className='commentary cm'; el.innerHTML=inlineMd(n.text); }
+    else if(n.kind==='thinking'){ el.className='think th'; el.innerHTML='<span class="pulse"></span>reasoning'; }
+    else if(n.kind==='exec'){
+      const short=n.cmd.length>72?n.cmd.slice(0,72)+'…':n.cmd;
+      const open=(n.output||'').split('\n').length<=6;
+      const body='<pre class="term"><span class="cmd-inline"><span class="ps1">$</span> '+esc(n.cmd)+'</span>\n'
+        +esc((n.output||'(no output)').replace(/\n+$/,''))+'</pre>';
+      el.className='ex'; el.innerHTML=card('exec','&gt;_',esc(short),'',body,open);
+    } else if(n.kind==='patch'){
+      const ch=n.changes||{}, files=Object.keys(ch);
+      const lbl=files.length?files.map(f=>f.split('/').pop()).join(', '):'apply_patch';
+      const badge='<span class="badge '+(n.success?'ok':'fail')+'">'+(n.success?'applied':'patch')+'</span>';
+      const body=files.length?diffHtml(ch):'<pre class="term">'+esc(n.input||'')+'</pre>';
+      el.innerHTML=card('patch','&#9670;','edit '+esc(lbl),badge,body,false);
+    } else if(n.kind==='plan'){
+      const steps=(n.steps||[]).map(s=>'<div class="pstep '+s.status+'"><span class="pp '+s.status+'">'
+        +String(s.status).replace('_',' ')+'</span><span class="ptxt">'+esc(s.step)+'</span></div>').join('');
+      const body='<div class="planbox">'+(n.explanation?'<p class="pexpl">'+esc(n.explanation)+'</p>':'')+steps+'</div>';
+      el.innerHTML=card('plan','&#10065;','update plan','',body,true);
+    } else if(n.kind==='search'){
+      const qs=(n.queries||[]).map(q=>'<span class="q">'+esc(q)+'</span>').join('');
+      el.innerHTML=card('search','&#9109;','web search ('+(n.queries||[]).length+')','','<div class="qchips">'+qs+'</div>',true);
+    } else if(n.kind==='aborted'){
+      el.className='aborted'; el.innerHTML='&#10005; turn interrupted ('+esc(n.reason||'')+')';
+    } else if(n.kind==='call'){
+      el.innerHTML=card('exec','&#8226;',esc(n.name||'tool'),'','<pre class="term">'+esc(n.output||'')+'</pre>',false);
+    }
+    thread.appendChild(el);
+  });
+
+  toc.innerHTML=anchors.map(t=>{
+    let label=t.text.replace(/\s+/g,' ').trim();
+    if(label.length>62) label=label.slice(0,62)+'…';
+    return '<li><a href="#'+t.id+'">'+esc(label)+'</a></li>';
+  }).join('');
+  const links=[...toc.querySelectorAll('a')];
+  if(currentObs) currentObs.disconnect();
+  currentObs=new IntersectionObserver(es=>es.forEach(e=>{
+    if(e.isIntersecting) links.forEach(l=>l.classList.toggle('active',l.getAttribute('href')==='#'+e.target.id));
+  }),{rootMargin:'-10% 0px -80% 0px'});
+  anchors.forEach(t=>{const el=document.getElementById(t.id); if(el) currentObs.observe(el);});
+
+  const map={commentary:'.cm',exec:'.ex',think:'.th'};
+  document.querySelectorAll('.tgl').forEach(b=>{
+    const apply=()=>document.querySelectorAll(map[b.dataset.t]).forEach(e=>e.classList.toggle('hidden',!b.classList.contains('on')));
+    b.onclick=()=>{b.classList.toggle('on'); apply();};
+    apply();
+  });
+  window.scrollTo(0,0);
+}
+
+/* =========================================================================
+   4. APP FLOW  (screens, file handling)
+   ========================================================================= */
+const screens={drop:'screen-drop',list:'screen-list',view:'screen-view'};
+function show(name){
+  for(const k in screens) document.getElementById(screens[k]).classList.toggle('hidden',k!==name);
+  document.getElementById('btnSessions').classList.toggle('hidden', !(name==='view' && sessions.length>1));
+  document.getElementById('btnNew').classList.toggle('hidden', name==='drop');
+}
+let sessions=[];
+
+function renderList(){
+  document.getElementById('listH').textContent=sessions.length+' session'+(sessions.length>1?'s':'')+' found';
+  document.getElementById('listSub').textContent='Select a session to view its transcript.';
+  const wrap=document.getElementById('sessionCards'); wrap.innerHTML='';
+  sessions.forEach((s,idx)=>{
+    const m=s.model;
+    const c=document.createElement('div'); c.className='scard';
+    c.innerHTML=
+      '<div><div class="stitle">'+esc(m.started.slice(0,10))+' &mdash; <em>'+esc(m.repo_short)+'</em></div>'
+      +'<div class="smeta"><span>'+esc(m.ctx.model||'?')+'</span><span>commit '+esc(m.commit||'—')+'</span>'
+      +'<span>'+esc(m.started)+'</span><span>'+esc(s.name.split('/').pop())+'</span></div>'
+      +'<div class="snip">'+esc((m.firstUser||'').replace(/\s+/g,' ').slice(0,180))+'</div></div>'
+      +'<div class="mini">'
+      +'<div><div class="n">'+m.stats.turns+'</div><div class="l">turns</div></div>'
+      +'<div><div class="n">'+m.stats.execs+'</div><div class="l">cmds</div></div>'
+      +'<div><div class="n">'+m.stats.patches+'</div><div class="l">patches</div></div></div>';
+    c.onclick=()=>{ renderViewer(m); show('view'); };
+    wrap.appendChild(c);
+  });
+}
+
+function fail(msg){
+  const e=document.getElementById('err');
+  e.textContent='⚠ '+msg; e.classList.remove('hidden');
+  document.getElementById('busy').classList.add('hidden');
+}
+async function handleFile(file){
+  document.getElementById('err').classList.add('hidden');
+  document.getElementById('busy').classList.remove('hidden');
+  try{
+    const entries=await readArchive(file);
+    const dec=new TextDecoder('utf-8');
+    sessions=[];
+    for(const f of entries){
+      const lower=f.name.toLowerCase();
+      if(lower.indexOf('sessions/')===-1 || !lower.endsWith('.jsonl')) continue;
+      const text=dec.decode(f.bytes);
+      const parsed=parseRollout(text);
+      if(!parsed.meta || !parsed.meta.id) continue;          // not a rollout
+      if(parsed.nodes.filter(n=>n.kind==='user').length===0) continue;
+      sessions.push({name:f.name, model:computeModel(parsed)});
+    }
+    if(sessions.length===0){ fail("No Codex session logs found in this archive. Expected rollout-*.jsonl under .codex/sessions/."); return; }
+    sessions.sort((a,b)=>(b.model.meta.started||'').localeCompare(a.model.meta.started||''));
+    document.getElementById('busy').classList.add('hidden');
+    if(sessions.length===1){ renderViewer(sessions[0].model); show('view'); }
+    else{ renderList(); show('list'); }
+  }catch(err){ console.error(err); fail("Could not read archive: "+(err.message||err)); }
+}
+
+// wire up DOM
+const dz=document.getElementById('dz'), input=document.getElementById('fileInput');
+dz.addEventListener('click',()=>input.click());
+input.addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.files[0]); });
+['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault(); dz.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault(); dz.classList.remove('drag');}));
+dz.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+document.getElementById('btnSessions').onclick=()=>{ renderList(); show('list'); };
+document.getElementById('btnNew').onclick=()=>{ sessions=[]; input.value=''; show('drop'); };
+show('drop');
+</script>
+</body>
+</html>
