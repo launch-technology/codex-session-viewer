@@ -41,6 +41,7 @@ a:hover{text-decoration:underline}
 .brand{font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.16em;
   text-transform:uppercase; color:var(--amber-d); display:flex; align-items:center; gap:9px}
 .brand .gly{color:var(--sage); font-weight:600}
+.ver{font-family:"IBM Plex Mono",monospace; font-size:10px; color:var(--txt-dim); letter-spacing:.08em}
 .appbar .sp{flex:1}
 .navbtn{font-family:"IBM Plex Mono",monospace; font-size:11.5px; cursor:pointer;
   background:var(--panel); border:1px solid var(--line); color:var(--txt-soft);
@@ -202,8 +203,9 @@ footer{border-top:1px solid var(--line); padding:24px 0 60px; color:var(--txt-di
 
 <div class="appbar"><div class="wrap">
   <span class="brand"><span class="gly">&gt;_</span> Codex Session Viewer</span>
+  <span class="ver" id="appVer"></span>
   <span class="sp"></span>
-  <a class="navbtn" href="https://github.com/launch-technology/codex-session-viewer#readme" target="_blank" rel="noopener">? guide</a>
+  <a class="navbtn" href="https://github.com/launch-technology/codex-session-viewer#readme" target="_blank" rel="noopener">Help</a>
   <span class="navbtn hidden" id="btnSessions">&larr; sessions</span>
   <span class="navbtn hidden" id="btnNew">&uarr; new archive</span>
 </div></div>
@@ -633,6 +635,8 @@ input.addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.f
 dz.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
 document.getElementById('btnSessions').onclick=()=>{ renderList(); show('list'); };
 document.getElementById('btnNew').onclick=()=>{ sessions=[]; input.value=''; show('drop'); };
+const APP_VERSION='v1.0.1';
+document.getElementById('appVer').textContent=APP_VERSION;
 show('drop');
 </script>
 </body>
