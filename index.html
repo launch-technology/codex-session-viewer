@@ -195,6 +195,11 @@ body.show-ide-context .user-block .utext.utext-raw{display:block}
 .think .pulse{width:5px;height:5px;border-radius:50%;background:var(--violet)}
 .aborted{margin:18px 0; padding:11px 15px; border-radius:8px; background:#2a1b1a; border:1px solid #5a302c;
   color:var(--rose); font-family:"IBM Plex Mono",monospace; font-size:12.5px}
+.idle-mark{display:flex; align-items:center; gap:10px; margin:22px 0; font-family:"IBM Plex Mono",monospace;
+  font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--txt-dim); cursor:help}
+.idle-mark::before,.idle-mark::after{content:""; flex:1; height:1px; background:var(--line)}
+.idle-mark .dot{width:6px;height:6px;border-radius:50%;background:var(--txt-dim); flex:none}
+.stat .lab.has-tip{cursor:help; border-bottom:1px dotted var(--line2); padding-bottom:1px}
 .ok{color:var(--sage)} .fail{color:var(--rose)}
 .badge{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:1px 7px; border-radius:5px;
   background:var(--panel2); color:var(--txt-dim); margin-left:6px}
@@ -209,6 +214,7 @@ footer{border-top:1px solid var(--line); padding:24px 0 60px; color:var(--txt-di
   <span class="ver" id="appVer"></span>
   <span class="sp"></span>
   <a class="navbtn" href="https://github.com/launch-technology/codex-session-viewer#readme" target="_blank" rel="noopener">Help</a>
+  <a class="navbtn" href="https://github.com/launch-technology/codex-session-viewer/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
   <span class="navbtn hidden" id="btnSessions">&larr; sessions</span>
   <span class="navbtn hidden" id="btnNew">&uarr; new archive</span>
 </div></div>
@@ -418,6 +424,16 @@ function parseRollout(text){
   }
   return {meta,ctx,nodes};
 }
+const IDLE_GAP_MS=5*60*1000;
+function fmtDur(ms){
+  if(!isFinite(ms)||ms<0) return '—';
+  const s=Math.round(ms/1000);
+  if(s<60) return s+'s';
+  const m=Math.floor(s/60), rs=s%60;
+  if(m<60) return rs?m+'m '+rs+'s':m+'m';
+  const h=Math.floor(m/60), rm=m%60;
+  return rm?h+'h '+rm+'m':h+'h';
+}
 function computeModel(parsed){
   const {meta,ctx,nodes}=parsed;
   const cnt=k=>nodes.filter(n=>n.kind===k).length;
@@ -428,7 +444,26 @@ function computeModel(parsed){
   const commit=((meta.git||{}).commit_hash||"").slice(0,10);
   const started=(meta.started||"").slice(0,19).replace("T"," ")+" UTC";
   const firstUser=(nodes.find(n=>n.kind==="user")||{}).text||"";
+  const tsMs=t=>t?Date.parse(t):NaN;
+  const startMs=tsMs(meta.started);
+  let prev=startMs, firstTs=NaN, lastTs=NaN, activeMs=0, idleMs=0;
+  nodes.forEach(n=>{
+    const t=tsMs(n.ts); if(!isFinite(t)) return;
+    if(!isFinite(firstTs)) firstTs=t;
+    lastTs=t;
+    if(isFinite(prev)){
+      const gap=t-prev;
+      if(gap>0){
+        if(gap>=IDLE_GAP_MS){ n.idleBefore=gap; idleMs+=gap; }
+        else { activeMs+=gap; }
+      }
+    }
+    prev=t;
+  });
+  const anchorStart=isFinite(startMs)?startMs:firstTs;
+  const totalMs=(isFinite(lastTs)&&isFinite(anchorStart))?(lastTs-anchorStart):NaN;
   return {meta,ctx,nodes,repo_short,commit,started,firstUser,
+    duration:{totalMs,activeMs,idleMs,thresholdMs:IDLE_GAP_MS},
     stats:{turns:cnt("user"),execs:cnt("exec"),patches:cnt("patch"),
            thoughts:cnt("thinking"),files:[...files].sort()}};
 }
@@ -508,11 +543,24 @@ function renderViewer(model){
     model.ctx.personality?'<span class="chip">'+esc(model.ctx.personality)+' · sandbox: '+esc(model.ctx.sandbox||'?')+'</span>':'',
     '<span class="chip">'+esc(model.started)+'</span>',
   ].join('');
-  const S=model.stats;
+  const S=model.stats, D=model.duration||{};
+  const idleMin=Math.round((D.thresholdMs||0)/60000);
+  const totalTip='Wall-clock duration: from the first recorded event in the session to the last.';
+  const activeTip='Sum of gaps between consecutive events, ignoring any gap longer than '+idleMin+
+    ' minutes. Approximates time you were actively working with Codex rather than idle.';
   document.getElementById('stats').innerHTML=[
-    ['Turns',S.turns],['Commands',S.execs],['Patches',S.patches],
-    ['Files touched',S.files.length],['Reasoning steps',S.thoughts],
-  ].map(([l,v])=>'<div class="stat"><div class="num">'+v+'</div><div class="lab">'+l+'</div></div>').join('');
+    ['Turns',S.turns,null],
+    ['Commands',S.execs,null],
+    ['Patches',S.patches,null],
+    ['Files touched',S.files.length,null],
+    ['Total time',fmtDur(D.totalMs),totalTip],
+    ['Active time',fmtDur(D.activeMs),activeTip],
+    ['Reasoning steps',S.thoughts,null],
+  ].map(([l,v,tip])=>{
+    const tipAttr=tip?' title="'+esc(tip)+'"':'';
+    const labCls=tip?'lab has-tip':'lab';
+    return '<div class="stat"'+tipAttr+'><div class="num">'+v+'</div><div class="'+labCls+'">'+l+'</div></div>';
+  }).join('');
   document.getElementById('vFooter').textContent=
     'session '+(model.meta.id||'').slice(0,18)+' · cli '+(model.meta.cli_version||'')
     +' · model '+(model.ctx.model||'')+' · '+model.started;
@@ -520,7 +568,16 @@ function renderViewer(model){
   const thread=document.getElementById('thread'), toc=document.getElementById('toc');
   thread.innerHTML=''; toc.innerHTML='';
   let qn=0; const anchors=[];
+  const idleMinTip=Math.round((model.duration?.thresholdMs||0)/60000);
   model.nodes.forEach(n=>{
+    if(n.idleBefore){
+      const gap=document.createElement('div');
+      gap.className='idle-mark';
+      gap.title='No recorded activity for '+fmtDur(n.idleBefore)+'. Gaps over '+idleMinTip+
+        ' minutes are treated as inactive and excluded from "Active time".';
+      gap.innerHTML='<span>inactive</span><span class="dot"></span><span>'+esc(fmtDur(n.idleBefore))+'</span>';
+      thread.appendChild(gap);
+    }
     const el=document.createElement('div');
     if(n.kind==='user'){
       qn++; const aid='q'+qn; anchors.push({id:aid,text:n.text});
@@ -652,7 +709,7 @@ input.addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.f
 dz.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
 document.getElementById('btnSessions').onclick=()=>{ renderList(); show('list'); };
 document.getElementById('btnNew').onclick=()=>{ sessions=[]; input.value=''; show('drop'); };
-const APP_VERSION='v1.0.1';
+const APP_VERSION='v1.2.0';
 document.getElementById('appVer').textContent=APP_VERSION;
 show('drop');
 </script>
