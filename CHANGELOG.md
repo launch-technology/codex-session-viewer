@@ -5,6 +5,13 @@ shown in the top app bar matches the latest entry below — if they don't
 match, refresh the page (Cmd/Ctrl + Shift + R) to clear your browser
 cache.
 
+## v1.2.1 — 2026-05-30
+
+- Fixed the **stat and inactivity-marker tooltips**, which previously
+  relied on flaky browser-native tooltips. They now appear as styled
+  popovers on hover, with clearer dotted-underline cues on the stat
+  labels so it's obvious what's hoverable.
+
 ## v1.2.0 — 2026-05-30
 
 - Added a **Changelog** link in the top app bar so you can see what

@@ -193,10 +193,25 @@ h1.title .repo{color:var(--amber); font-style:italic}
 .aborted{margin:18px 0; padding:11px 15px; border-radius:8px; background:#2a1b1a; border:1px solid #5a302c;
   color:var(--rose); font-family:"IBM Plex Mono",monospace; font-size:12.5px}
 .idle-mark{display:flex; align-items:center; gap:10px; margin:22px 0; font-family:"IBM Plex Mono",monospace;
-  font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--txt-dim); cursor:help}
-.idle-mark::before,.idle-mark::after{content:""; flex:1; height:1px; background:var(--line)}
+  font-size:10.5px; letter-spacing:.16em; text-transform:uppercase; color:var(--txt-dim)}
+.idle-line{flex:1; height:1px; background:var(--line)}
+.idle-text{display:inline-flex; align-items:center; gap:10px; cursor:help; position:relative; padding:2px 4px}
 .idle-mark .dot{width:6px;height:6px;border-radius:50%;background:var(--txt-dim); flex:none}
-.stat .lab.has-tip{cursor:help; border-bottom:1px dotted var(--line2); padding-bottom:1px}
+.stat{position:relative}
+.stat .lab.has-tip{cursor:help; border-bottom:1px dotted var(--amber-d); padding-bottom:1px; color:var(--txt-soft)}
+[data-tip]{position:relative}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{
+  content:attr(data-tip); position:absolute; bottom:calc(100% + 9px); left:50%;
+  transform:translateX(-50%); background:var(--ink2); border:1px solid var(--line2);
+  color:var(--txt); font-family:"IBM Plex Sans",sans-serif; font-size:12px; line-height:1.5;
+  letter-spacing:normal; text-transform:none; font-weight:400; text-align:left;
+  padding:9px 12px; border-radius:8px; white-space:normal; width:max-content; max-width:280px;
+  z-index:50; box-shadow:0 8px 24px rgba(0,0,0,.45); pointer-events:none}
+[data-tip]:hover::before,[data-tip]:focus-visible::before{
+  content:""; position:absolute; bottom:calc(100% + 3px); left:50%;
+  transform:translateX(-50%) rotate(45deg); width:8px; height:8px; background:var(--ink2);
+  border-right:1px solid var(--line2); border-bottom:1px solid var(--line2);
+  z-index:51; pointer-events:none}
 .ok{color:var(--sage)} .fail{color:var(--rose)}
 .badge{font-family:"IBM Plex Mono",monospace; font-size:10px; padding:1px 7px; border-radius:5px;
   background:var(--panel2); color:var(--txt-dim); margin-left:6px}
@@ -543,7 +558,7 @@ function renderViewer(model){
     ['Active time',fmtDur(D.activeMs),activeTip],
     ['Reasoning steps',S.thoughts,null],
   ].map(([l,v,tip])=>{
-    const tipAttr=tip?' title="'+esc(tip)+'"':'';
+    const tipAttr=tip?' data-tip="'+esc(tip)+'"':'';
     const labCls=tip?'lab has-tip':'lab';
     return '<div class="stat"'+tipAttr+'><div class="num">'+v+'</div><div class="'+labCls+'">'+l+'</div></div>';
   }).join('');
@@ -559,9 +574,12 @@ function renderViewer(model){
     if(n.idleBefore){
       const gap=document.createElement('div');
       gap.className='idle-mark';
-      gap.title='No recorded activity for '+fmtDur(n.idleBefore)+'. Gaps over '+idleMinTip+
-        ' minutes are treated as inactive and excluded from "Active time".';
-      gap.innerHTML='<span>inactive</span><span class="dot"></span><span>'+esc(fmtDur(n.idleBefore))+'</span>';
+      const tip='No recorded activity for '+fmtDur(n.idleBefore)+'. Gaps over '+idleMinTip+
+        ' minutes are treated as inactive and excluded from Active time.';
+      gap.innerHTML='<span class="idle-line"></span>'
+        +'<span class="idle-text" data-tip="'+esc(tip)+'" tabindex="0">'
+        +'<span>inactive</span><span class="dot"></span><span>'+esc(fmtDur(n.idleBefore))+'</span>'
+        +'</span><span class="idle-line"></span>';
       thread.appendChild(gap);
     }
     const el=document.createElement('div');
@@ -692,7 +710,7 @@ input.addEventListener('change',e=>{ if(e.target.files[0]) handleFile(e.target.f
 dz.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
 document.getElementById('btnSessions').onclick=()=>{ renderList(); show('list'); };
 document.getElementById('btnNew').onclick=()=>{ sessions=[]; input.value=''; show('drop'); };
-const APP_VERSION='v1.2.0';
+const APP_VERSION='v1.2.1';
 document.getElementById('appVer').textContent=APP_VERSION;
 show('drop');
 </script>
