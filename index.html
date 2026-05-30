@@ -136,6 +136,9 @@ h1.title .repo{color:var(--amber); font-style:italic}
 .user-block .uq .ln{flex:1; height:1px; background:var(--line)}
 .user-block .utext{color:var(--txt); font-size:15.5px; line-height:1.62}
 .user-block .utext p{margin:0 0 .6em} .user-block .utext p:last-child{margin:0}
+.user-block .utext.utext-raw{display:none}
+body.show-ide-context .user-block .utext.utext-stripped{display:none}
+body.show-ide-context .user-block .utext.utext-raw{display:block}
 .final{color:var(--txt); font-size:15px; line-height:1.68; padding:4px 0}
 .final p{margin:0 0 .85em}
 .final h4{font-family:"Fraunces",serif; font-weight:600; font-size:17px; margin:1.1em 0 .4em; color:var(--amber)}
@@ -251,6 +254,7 @@ footer{border-top:1px solid var(--line); padding:24px 0 60px; color:var(--txt-di
         <span class="tgl on" data-t="commentary">commentary</span>
         <span class="tgl on" data-t="exec">terminal</span>
         <span class="tgl" data-t="think">reasoning</span>
+        <span class="tgl on" data-t="ide">ide context</span>
       </div>
     </nav>
     <main class="thread" id="thread"></main>
@@ -332,6 +336,15 @@ function cleanOutput(out){
   const body = started ? keep.join("\n") : out;
   return body.replace(/\n+$/,"")+"\n";
 }
+function stripIdeContext(text){
+  // VSCode plugin prefixes prompts with "# Context from my IDE setup:" ... "## My request for Codex:"
+  // followed by the actual user prompt. Strip everything through that end marker.
+  if(typeof text!=='string' || !text) return text;
+  if(!/^\s*#{1,6}\s*Context from my IDE setup\b/.test(text)) return text;
+  const m=text.match(/\n\s*#{1,6}\s*My request for Codex\b[^\n]*\n?/);
+  if(!m) return text;
+  return text.slice(m.index+m[0].length).replace(/^\n+/,'');
+}
 function parseRollout(text){
   const meta={}, ctx={}, nodes=[], byCall={}; const wsIds=new Set();
   let lastTerm=null, lastUser=null;
@@ -353,9 +366,10 @@ function parseRollout(text){
     if(t==="event_msg"){
       const pt=p.type;
       if(pt==="user_message"){
-        const msg=(p.message||"").trim();
+        const raw=(p.message||"").trim();
+        const msg=stripIdeContext(raw).trim();
         if(lastUser!==null && lastUser===msg) continue;
-        lastUser=msg; add({kind:"user",ts,text:msg});
+        lastUser=msg; add({kind:"user",ts,text:msg,rawText:raw});
       } else if(pt==="patch_apply_end"){
         const n=byCall[p.call_id]; if(n){ n.success=p.success; n.changes=p.changes||{}; }
       } else if(pt==="turn_aborted"){
@@ -512,7 +526,8 @@ function renderViewer(model){
       qn++; const aid='q'+qn; anchors.push({id:aid,text:n.text});
       el.className='user-block'; el.id=aid;
       el.innerHTML='<div class="uq"><span>Turn '+String(qn).padStart(2,'0')+'</span><span class="ln"></span><span>user</span></div>'
-        +'<div class="utext">'+renderMd(n.text)+'</div>';
+        +'<div class="utext utext-stripped">'+renderMd(n.text)+'</div>'
+        +'<div class="utext utext-raw">'+renderMd(n.rawText)+'</div>';
     } else if(n.kind==='final'){ el.className='final'; el.innerHTML=renderMd(n.text); }
     else if(n.kind==='commentary'){ el.className='commentary cm'; el.innerHTML=inlineMd(n.text); }
     else if(n.kind==='thinking'){ el.className='think th'; el.innerHTML='<span class="pulse"></span>reasoning'; }
@@ -558,7 +573,9 @@ function renderViewer(model){
 
   const map={commentary:'.cm',exec:'.ex',think:'.th'};
   document.querySelectorAll('.tgl').forEach(b=>{
-    const apply=()=>document.querySelectorAll(map[b.dataset.t]).forEach(e=>e.classList.toggle('hidden',!b.classList.contains('on')));
+    const apply = b.dataset.t==='ide'
+      ? ()=>document.body.classList.toggle('show-ide-context', !b.classList.contains('on'))
+      : ()=>document.querySelectorAll(map[b.dataset.t]).forEach(e=>e.classList.toggle('hidden',!b.classList.contains('on')));
     b.onclick=()=>{b.classList.toggle('on'); apply();};
     apply();
   });
